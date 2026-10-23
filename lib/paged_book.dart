@@ -12,7 +12,11 @@ class PagedBook extends StatefulWidget {
     required this.paper,
     required this.font,
     required this.fontSize,
+    this.initialOffset = 0,
+    this.onPositionChanged,
   });
+  final int initialOffset;
+  final ValueChanged<int>? onPositionChanged;
   final BookContent book;
   final PaperTheme paper;
   final String font;
@@ -22,11 +26,16 @@ class PagedBook extends StatefulWidget {
 }
 
 class _PagedBookState extends State<PagedBook> {
-  final controller = PageController();
+  late PageController controller;
+  bool initialized = false;
+  String layoutSignature = '';
+  late int textOffset = widget.initialOffset;
   int current = 0;
   @override
   void dispose() {
-    controller.dispose();
+    if (initialized) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -109,6 +118,33 @@ class _PagedBookState extends State<PagedBook> {
         style,
         scaler,
       );
+      final starts = <int>[];
+      var total = 0;
+      for (final page in pages) {
+        starts.add(total);
+        total += page.length;
+      }
+      var target = 0;
+      for (var i = 0; i < starts.length; i++) {
+        if (starts[i] <= textOffset) {
+          target = i;
+        }
+      }
+      final signature = '$width-$height-${scaler.scale(widget.fontSize)}';
+      if (!initialized) {
+        current = target;
+        controller = PageController(initialPage: target);
+        initialized = true;
+        layoutSignature = signature;
+      } else if (signature != layoutSignature) {
+        layoutSignature = signature;
+        current = target;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && controller.hasClients) {
+            controller.jumpToPage(target);
+          }
+        });
+      }
       final reduceMotion = MediaQuery.disableAnimationsOf(context);
       return Column(
         children: [
@@ -125,7 +161,11 @@ class _PagedBookState extends State<PagedBook> {
             child: PageView.builder(
               controller: controller,
               itemCount: pages.length,
-              onPageChanged: (value) => setState(() => current = value),
+              onPageChanged: (value) {
+                setState(() => current = value);
+                textOffset = starts[value];
+                widget.onPositionChanged?.call(textOffset);
+              },
               itemBuilder: (context, index) => AnimatedBuilder(
                 animation: controller,
                 builder: (context, child) {

@@ -1,4 +1,4 @@
-﻿name: e_reader
+name: e_reader
 description: "Android, iOS, web ve Windows için e-reader uygulaması."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -40,6 +40,8 @@ dependencies:
   pdfrx: ^2.10.1
   html: ^0.15.7
   path_provider: ^2.1.6
+  shared_preferences: ^2.5.6
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:
@@ -52,6 +54,7 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
+  shared_preferences_platform_interface: ^2.4.2
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

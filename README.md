@@ -4,11 +4,12 @@ Android, iOS, web ve Windows için Flutter e-reader uygulaması.
 
 ## Özellikler
 
-- Raf görünümünde kitaplık ve cihazdan kitap ekleme.
+- Raf görünümünde kitaplık, Türkçe başlık araması ve cihazdan kitap ekleme.
 - Mobil ve Windows uygulama belgelerinde e-books klasörünün oluşturulması ve taranması.
 - Açılışta, uygulamaya dönüldüğünde ve elle yenilemede kitapları keşfetme.
 - EPUB ve DOCX metin okuma; PDF özgün sayfa görünümü.
 - Yazı tipi/boyutu, beş kâğıt teması ve metinlerde animasyonlu sayfa çevirme.
+- Görünüm tercihlerinin saklanması ve EPUB, DOCX, PDF kitaplarda kaldığı yerden devam etme.
 
 ## Mevcut sınırlar
 
@@ -17,7 +18,7 @@ Android, iOS, web ve Windows için Flutter e-reader uygulaması.
 - Web kitaplığı bu oturumla sınırlıdır; kalıcı depolama ve cihaz klasörü tarama yoktur.
 - Mobil/Windows e-books klasörü uygulamanın belgelerindedir; telefondaki herhangi bir genel klasörü otomatik taramaz. Tam yol uygulamada gösterilir. iOS Dosyalar paylaşımı açıktır.
 - Tarama alt klasörlere inmez. Dosya başına 100 MB sınırı vardır.
-- Okuma konumu ve görünüm tercihleri henüz kalıcı kaydedilmez. PDF'de yazı tipi değişimi ve metin okuyucusunun sayfa efekti uygulanmaz.
+- PDF'de yazı tipi değişimi ve metin okuyucusunun sayfa efekti uygulanmaz. Okuma konumu ve tercihler cihazda saklanır; cihazlar arası eşitleme yoktur.
 
 ## Geliştirme
 

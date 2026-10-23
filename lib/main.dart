@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'books.dart';
 import 'library.dart';
 import 'paged_book.dart';
+import 'reading_store.dart';
 
 void main() => runApp(const EReaderApp());
 
@@ -38,7 +39,9 @@ enum PaperTheme {
 }
 
 class ReaderPage extends StatefulWidget {
-  const ReaderPage({super.key, this.book});
+  const ReaderPage({super.key, this.book, this.bookId, this.store});
+  final String? bookId;
+  final ReadingStore? store;
   final BookContent? book;
   @override
   State<ReaderPage> createState() => _ReaderPageState();
@@ -48,6 +51,81 @@ class _ReaderPageState extends State<ReaderPage> {
   String font = 'Lora';
   double fontSize = 20;
   PaperTheme paper = PaperTheme.ivory;
+
+  late final ReadingStore store = widget.store ?? ReadingStore.device;
+  bool loading = true;
+  int offset = 0;
+  bool storageWarningShown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    restore();
+  }
+
+  Future<void> restore() async {
+    try {
+      final saved = await store.settings();
+      final position = widget.bookId == null
+          ? 0
+          : await store.position(widget.bookId!);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        font = saved.font;
+        fontSize = saved.size;
+        paper = PaperTheme.values.firstWhere((p) => p.name == saved.paper);
+        offset = position;
+      });
+    } catch (_) {
+      storageWarning();
+    } finally {
+      if (mounted) {
+        setState(() => loading = false);
+      }
+    }
+  }
+
+  void storageWarning() {
+    if (!mounted || storageWarningShown) {
+      return;
+    }
+    storageWarningShown = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Okuma tercihleri kaydedilemiyor. Cihaz depolamasını kontrol edin.',
+            ),
+          ),
+        );
+      }
+    });
+  }
+
+  Future<void> saveSettings() async {
+    try {
+      await store.saveSettings(
+        ReadingSettings(font: font, size: fontSize, paper: paper.name),
+      );
+    } catch (_) {
+      storageWarning();
+    }
+  }
+
+  Future<void> savePosition(int value) async {
+    offset = value;
+    if (widget.bookId == null) {
+      return;
+    }
+    try {
+      await store.savePosition(widget.bookId!, value);
+    } catch (_) {
+      storageWarning();
+    }
+  }
 
   Widget settings() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -80,7 +158,10 @@ class _ReaderPageState extends State<ReaderPage> {
                 ),
               ),
               selected: font == entry.key,
-              onSelected: (_) => setState(() => font = entry.key),
+              onSelected: (_) {
+                setState(() => font = entry.key);
+                saveSettings();
+              },
             ),
         ],
       ),
@@ -93,6 +174,7 @@ class _ReaderPageState extends State<ReaderPage> {
         divisions: 16,
         label: '${fontSize.round()}',
         onChanged: (value) => setState(() => fontSize = value),
+        onChangeEnd: (_) => saveSettings(),
       ),
       const SizedBox(height: 12),
       const Text('Sayfa dokusu'),
@@ -108,7 +190,10 @@ class _ReaderPageState extends State<ReaderPage> {
                 message: theme.label,
                 child: InkWell(
                   borderRadius: BorderRadius.circular(12),
-                  onTap: () => setState(() => paper = theme),
+                  onTap: () {
+                    setState(() => paper = theme);
+                    saveSettings();
+                  },
                   child: Container(
                     width: 108,
                     height: 76,
@@ -157,6 +242,8 @@ class _ReaderPageState extends State<ReaderPage> {
       ? PagedBook(
           key: ValueKey('${widget.book!.title}-$font-$fontSize'),
           book: widget.book!,
+          initialOffset: offset,
+          onPositionChanged: savePosition,
           paper: paper,
           font: font,
           fontSize: fontSize,
@@ -256,40 +343,42 @@ class _ReaderPageState extends State<ReaderPage> {
           ),
       ],
     ),
-    body: LayoutBuilder(
-      builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 1000;
-        return SingleChildScrollView(
-          padding: EdgeInsets.all(wide ? 36 : 16),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1180),
-              child: wide
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(child: page()),
-                        const SizedBox(width: 36),
-                        SizedBox(width: 270, child: settings()),
-                      ],
-                    )
-                  : Column(
-                      children: [
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: settings(),
+    body: loading
+        ? const Center(child: CircularProgressIndicator())
+        : LayoutBuilder(
+            builder: (context, constraints) {
+              final wide = constraints.maxWidth >= 1000;
+              return SingleChildScrollView(
+                padding: EdgeInsets.all(wide ? 36 : 16),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1180),
+                    child: wide
+                        ? Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: page()),
+                              const SizedBox(width: 36),
+                              SizedBox(width: 270, child: settings()),
+                            ],
+                          )
+                        : Column(
+                            children: [
+                              Card(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(20),
+                                  child: settings(),
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              page(),
+                            ],
                           ),
-                        ),
-                        const SizedBox(height: 24),
-                        page(),
-                      ],
-                    ),
-            ),
+                  ),
+                ),
+              );
+            },
           ),
-        );
-      },
-    ),
   );
 }
 

@@ -1,22 +1,34 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:pdfrx/pdfrx.dart';
+import 'package:crypto/crypto.dart';
+
+import 'pdf_reader.dart';
 
 import 'book_store.dart';
 import 'books.dart';
 import 'main.dart';
 
+String bookFingerprint(Uint8List bytes) => sha256.convert(bytes).toString();
+
+String searchKey(String text) =>
+    text.replaceAll('İ', 'i').replaceAll('I', 'ı').toLowerCase();
+
 class LibraryPage extends StatefulWidget {
-  const LibraryPage({super.key});
+  const LibraryPage({super.key, this.store});
+  final BookStore? store;
   @override
   State<LibraryPage> createState() => _LibraryPageState();
 }
 
 class _LibraryPageState extends State<LibraryPage> with WidgetsBindingObserver {
-  final store = BookStore();
+  late final store = widget.store ?? BookStore();
   List<BookFile> books = [];
   String location = '';
+  String query = '';
+  List<BookFile> get filteredBooks => books
+      .where((book) => searchKey(book.title).contains(searchKey(query.trim())))
+      .toList();
   bool busy = false;
   String? error;
 
@@ -101,24 +113,27 @@ class _LibraryPageState extends State<LibraryPage> with WidgetsBindingObserver {
   void message(String text) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   Future<void> open(BookFile book) async {
-    if (book.extension == 'pdf') {
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => Scaffold(
-            appBar: AppBar(title: Text(book.title)),
-            body: PdfViewer.data(book.bytes, sourceName: book.name),
-          ),
-        ),
-      );
-      return;
-    }
     try {
+      final id = await compute(bookFingerprint, book.bytes);
+      if (!mounted) {
+        return;
+      }
+      if (book.extension == 'pdf') {
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => PdfReaderPage(book: book, bookId: id),
+          ),
+        );
+        return;
+      }
       final content = await compute(readBook, book);
       if (!mounted) {
         return;
       }
       await Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => ReaderPage(book: content)),
+        MaterialPageRoute<void>(
+          builder: (_) => ReaderPage(book: content, bookId: id),
+        ),
       );
     } on BookReadException catch (e) {
       if (mounted) {
@@ -156,11 +171,17 @@ class _LibraryPageState extends State<LibraryPage> with WidgetsBindingObserver {
         ),
         Padding(
           padding: const EdgeInsets.only(right: 12),
-          child: FilledButton.icon(
-            onPressed: busy ? null : add,
-            icon: const Icon(Icons.add),
-            label: const Text('Kitap ekle'),
-          ),
+          child: MediaQuery.sizeOf(context).width < 400
+              ? IconButton(
+                  tooltip: 'Kitap ekle',
+                  onPressed: busy ? null : add,
+                  icon: const Icon(Icons.add),
+                )
+              : FilledButton.icon(
+                  onPressed: busy ? null : add,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Kitap ekle'),
+                ),
         ),
       ],
     ),
@@ -177,6 +198,20 @@ class _LibraryPageState extends State<LibraryPage> with WidgetsBindingObserver {
           const SizedBox(height: 8),
           const Text('Bir kitap seç. Yeni bir dünyaya açıl.'),
           const SizedBox(height: 20),
+          TextField(
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search),
+              hintText: 'Kitaplığında ara',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (value) => setState(() => query = value),
+          ),
+          const SizedBox(height: 20),
+          if (books.isNotEmpty && filteredBooks.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Text('Aramana uygun kitap bulunamadı.'),
+            ),
           if (busy) const LinearProgressIndicator(),
           if (error != null)
             Text(
@@ -212,7 +247,7 @@ class _LibraryPageState extends State<LibraryPage> with WidgetsBindingObserver {
               final columns = (constraints.maxWidth / 165).floor().clamp(1, 7);
               return Column(
                 children: [
-                  for (var row = 0; row * columns < books.length; row++)
+                  for (var row = 0; row * columns < filteredBooks.length; row++)
                     Container(
                       margin: const EdgeInsets.only(bottom: 30),
                       padding: const EdgeInsets.fromLTRB(10, 12, 10, 0),
@@ -236,9 +271,10 @@ class _LibraryPageState extends State<LibraryPage> with WidgetsBindingObserver {
                         children: [
                           for (var column = 0; column < columns; column++)
                             Expanded(
-                              child: row * columns + column < books.length
+                              child:
+                                  row * columns + column < filteredBooks.length
                                   ? cover(
-                                      books[row * columns + column],
+                                      filteredBooks[row * columns + column],
                                       row * columns + column,
                                     )
                                   : const SizedBox(),
