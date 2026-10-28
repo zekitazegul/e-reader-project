@@ -1,6 +1,7 @@
 #include "flutter_window.h"
 
 #include <optional>
+#include <flutter/standard_method_codec.h>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -25,6 +26,21 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  window_channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+      flutter_controller_->engine()->messenger(), "e_reader/window",
+      &flutter::StandardMethodCodec::GetInstance());
+  window_channel_->SetMethodCallHandler([this](const auto& call, auto result) {
+    if (call.method_name() != "setFullscreen") {
+      result->NotImplemented();
+      return;
+    }
+    const auto* enabled = call.arguments() ? std::get_if<bool>(call.arguments()) : nullptr;
+    if (!enabled || !SetFullscreen(*enabled)) {
+      result->Error("fullscreen_failed", "Window fullscreen could not be changed.");
+      return;
+    }
+    result->Success();
+  });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -40,11 +56,37 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  window_channel_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
 
   Win32Window::OnDestroy();
+}
+
+bool FlutterWindow::SetFullscreen(bool enabled) {
+  if (enabled == fullscreen_) return true;
+  const HWND hwnd = GetHandle();
+  if (enabled) {
+    MONITORINFO monitor = {sizeof(MONITORINFO)};
+    if (!GetWindowPlacement(hwnd, &saved_placement_) ||
+        !GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &monitor)) return false;
+    saved_style_ = GetWindowLongPtr(hwnd, GWL_STYLE);
+    SetWindowLongPtr(hwnd, GWL_STYLE, saved_style_ & ~WS_OVERLAPPEDWINDOW);
+    if (!SetWindowPos(hwnd, HWND_TOP, monitor.rcMonitor.left, monitor.rcMonitor.top,
+        monitor.rcMonitor.right - monitor.rcMonitor.left,
+        monitor.rcMonitor.bottom - monitor.rcMonitor.top, SWP_FRAMECHANGED | SWP_NOOWNERZORDER)) {
+      SetWindowLongPtr(hwnd, GWL_STYLE, saved_style_);
+      return false;
+    }
+  } else {
+    SetWindowLongPtr(hwnd, GWL_STYLE, saved_style_);
+    if (!SetWindowPlacement(hwnd, &saved_placement_)) return false;
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+  }
+  fullscreen_ = enabled;
+  return true;
 }
 
 LRESULT

@@ -1,0 +1,20 @@
+Offline dictionaries: FreeDict + WikDict, edition 2025.11.21.
+Dictionary maintainer: Karl Bartel / WikDict.
+Base lexical data: Wiktionary contributors, extracted through DBnary.
+
+Source: https://download.wikdict.com/dictionaries/tei/recommended/
+Project and attribution: https://www.wikdict.com/page/about
+Wiktionary: https://www.wiktionary.org/
+DBnary: https://kaiko.getalp.org/about-dbnary/
+
+License: Creative Commons Attribution-ShareAlike 3.0 Unported.
+License terms: https://creativecommons.org/licenses/by-sa/3.0/legalcode
+
+The JSON files in this directory are adaptations of the above TEI dictionaries.
+Changes: extracted headwords/forms and translation equivalents, normalized lookup
+keys, merged duplicate equivalents, removed non-lookup metadata, and serialized
+the results as JSON. These adapted dictionary data are distributed under the same
+CC BY-SA 3.0 license. The application source code is a separate work.
+
+Per-file source URLs, checksums and entry counts are recorded in sources.json.
+Reproducible preparation script: tool/prepare_dictionaries.py.

@@ -1,0 +1,38 @@
+[
+  {
+    "pair": "nl-en",
+    "source": "https://download.wikdict.com/dictionaries/tei/recommended/nld-eng.tei",
+    "source_sha256": "3468f7421840028431417c437acd02a38eb29e5fd1a69484573cc61c74d66313",
+    "entries": 39515
+  },
+  {
+    "pair": "nl-tr",
+    "source": "https://download.wikdict.com/dictionaries/tei/recommended/nld-tur.tei",
+    "source_sha256": "48fa1eee04824a1b3edac7980170598d4c44b01aedb507d998054489cd705630",
+    "entries": 9711
+  },
+  {
+    "pair": "en-nl",
+    "source": "https://download.wikdict.com/dictionaries/tei/recommended/eng-nld.tei",
+    "source_sha256": "a9157287c4aec55bd8ab99f4be562dd1cdc462ded38b5d71c095e5776ff82cdc",
+    "entries": 39215
+  },
+  {
+    "pair": "en-tr",
+    "source": "https://download.wikdict.com/dictionaries/tei/recommended/eng-tur.tei",
+    "source_sha256": "4edefa4948f6dd6753036e578524073446ae8c587fe6c9c82e7a68b4decde0e4",
+    "entries": 25085
+  },
+  {
+    "pair": "tr-nl",
+    "source": "https://download.wikdict.com/dictionaries/tei/recommended/tur-nld.tei",
+    "source_sha256": "a38062695e22077e332a8219b208bad3d455335836bac6302ea9529277399d2a",
+    "entries": 6876
+  },
+  {
+    "pair": "tr-en",
+    "source": "https://download.wikdict.com/dictionaries/tei/recommended/tur-eng.tei",
+    "source_sha256": "d1dd6700daa49e0b26e3690e96b550f11e8f6d56721192dd1853da0d6700b5fa",
+    "entries": 15297
+  }
+]

@@ -5,6 +5,11 @@ import 'package:archive/archive.dart';
 import 'package:html/parser.dart' as html;
 import 'package:xml/xml.dart';
 
+import 'mobi_conversion.dart';
+import 'epub_reference_pages.dart';
+import 'book_reference_page.dart';
+import 'book_print_catalog.dart';
+
 const bookExtensions = [
   'epub',
   'pdf',
@@ -20,19 +25,60 @@ const bookExtensions = [
 String extensionOf(String name) => name.split('.').last.toLowerCase();
 bool isBook(String name) => bookExtensions.contains(extensionOf(name));
 
+final _readingWhitespace = RegExp(r'[\s\u00a0\u2007\u202f]+');
+
+/// Normalize layout whitespace inside a paragraph, preserving paragraph breaks.
+String normalizeReadingParagraph(String text) =>
+    text.replaceAll(_readingWhitespace, ' ').trim();
+
+String? cleanBookAuthor(String? value) {
+  if (value == null) return null;
+  final names = value.split(RegExp(r'[,;|]')).map((name) => name.trim()).where((
+    name,
+  ) {
+    final normalized = name.replaceAll('İ', 'i').toLowerCase();
+    return name.isNotEmpty &&
+        !const {
+          'bilinmeyen',
+          'bilinmeyen yazar',
+          'unknown',
+          'unknown author',
+          'belirtilmemiş',
+        }.contains(normalized);
+  }).toList();
+  return names.isEmpty ? null : names.join(', ');
+}
+
 class BookFile {
-  const BookFile(this.name, this.bytes);
+  const BookFile(
+    this.name,
+    this.bytes, {
+    this.displayTitle,
+    this.cleanWhitespace = true,
+  });
   final String name;
   final Uint8List bytes;
+  final String? displayTitle;
+  final bool cleanWhitespace;
   String get title =>
+      displayTitle ??
       name.replaceFirst(RegExp(r'\.[^.]+$'), '').replaceAll('_', ' ');
   String get extension => extensionOf(name);
 }
 
 class BookContent {
-  const BookContent(this.title, this.paragraphs);
+  const BookContent(
+    this.title,
+    this.paragraphs, {
+    this.author,
+    this.referencePages = const [],
+    this.printEdition,
+  });
   final String title;
   final List<String> paragraphs;
+  final String? author;
+  final List<BookReferencePage> referencePages;
+  final BookPrintEdition? printEdition;
 }
 
 class BookReadException implements Exception {
@@ -40,6 +86,19 @@ class BookReadException implements Exception {
   final String message;
   @override
   String toString() => message;
+}
+
+bool needsEpubConversion(BookFile book) =>
+    ['mobi', 'prc'].contains(book.extension);
+
+BookFile convertBookToEpub(BookFile book) {
+  try {
+    return BookFile('${book.title}.epub', mobiToEpub(book.bytes, book.title));
+  } catch (_) {
+    throw const BookReadException(
+      'Kitap açılamadı. Dosya bozuk, şifreli veya desteklenmeyen bir yapıda olabilir.',
+    );
+  }
 }
 
 BookContent readBook(BookFile book) {
@@ -81,6 +140,10 @@ BookContent readBook(BookFile book) {
                 .map((e) => e.name.local == 't' ? e.innerText : ' ')
                 .join(),
           )
+          .map(
+            (text) =>
+                book.cleanWhitespace ? normalizeReadingParagraph(text) : text,
+          )
           .where((text) => text.trim().isNotEmpty)
           .toList();
       if (paragraphs.isEmpty) {
@@ -88,7 +151,24 @@ BookContent readBook(BookFile book) {
           'Bu belgede okunabilir metin bulunamadı.',
         );
       }
-      return BookContent(book.title, paragraphs);
+      final core = archive.findFile('docProps/core.xml');
+      String? author;
+      if (core != null) {
+        try {
+          final creators = XmlDocument.parse(utf8.decode(core.content))
+              .descendants
+              .whereType<XmlElement>()
+              .where((e) => e.name.local == 'creator');
+          if (creators.isNotEmpty) author = creators.first.innerText.trim();
+        } catch (_) {
+          // Optional author metadata must not prevent reading a valid document.
+        }
+      }
+      return BookContent(
+        book.title,
+        paragraphs,
+        author: cleanBookAuthor(author),
+      );
     }
     final container = XmlDocument.parse(source('META-INF/container.xml'));
     final root = container.descendants
@@ -103,6 +183,8 @@ BookContent readBook(BookFile book) {
       manifest[item.getAttribute('id')!] = item.getAttribute('href')!;
     }
     final paragraphs = <String>[];
+    final referencePages = EpubReferencePages(archive, package, root);
+    var textLength = 0;
     for (final ref in package.descendants.whereType<XmlElement>().where(
       (e) => e.name.local == 'itemref',
     )) {
@@ -116,28 +198,35 @@ BookContent readBook(BookFile book) {
       final blocks = document.querySelectorAll(
         'h1, h2, h3, h4, p, li, blockquote',
       );
-      if (blocks.isEmpty) {
-        final text = document.body?.text.trim() ?? '';
-        if (text.isNotEmpty) {
-          paragraphs.add(text);
-        }
-      } else {
-        paragraphs.addAll(
-          blocks
-              .where((e) {
-                var parent = e.parent;
-                while (parent != null) {
-                  if (blocks.contains(parent)) {
-                    return false;
-                  }
-                  parent = parent.parent;
-                }
-                return true;
-              })
-              .map((e) => e.text.trim())
-              .where((s) => s.isNotEmpty),
-        );
+      final blockSet = blocks.toSet();
+      final selected = blocks.isEmpty
+          ? [if (document.body != null) document.body!]
+          : blocks.where((element) {
+              var parent = element.parent;
+              while (parent != null) {
+                if (blockSet.contains(parent)) return false;
+                parent = parent.parent;
+              }
+              return true;
+            }).toList();
+      final mappedBlocks = <ReferenceTextBlock>[];
+      for (final element in selected) {
+        final raw = element.text;
+        final text = book.cleanWhitespace
+            ? normalizeReadingParagraph(raw)
+            : raw.trim();
+        if (text.isEmpty) continue;
+        if (paragraphs.isNotEmpty) textLength += 2;
+        mappedBlocks.add(ReferenceTextBlock(element, raw, text, textLength));
+        paragraphs.add(text);
+        textLength += text.length;
       }
+      referencePages.addChapter(
+        path,
+        document,
+        mappedBlocks,
+        cleanWhitespace: book.cleanWhitespace,
+      );
     }
     if (paragraphs.isEmpty) {
       throw const BookReadException(
@@ -150,6 +239,15 @@ BookContent readBook(BookFile book) {
     return BookContent(
       titles.isEmpty ? book.title : titles.first.innerText,
       paragraphs,
+      referencePages: referencePages.finish(),
+      author: cleanBookAuthor(
+        package.descendants
+            .whereType<XmlElement>()
+            .where((e) => e.name.local == 'creator')
+            .map((e) => e.innerText.trim())
+            .where((s) => s.isNotEmpty)
+            .join(', '),
+      ),
     );
   } on BookReadException {
     rethrow;

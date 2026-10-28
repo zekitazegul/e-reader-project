@@ -1,0 +1,4 @@
+﻿flutter_launcher_icons:
+  macos:
+    generate: true
+    image_path: assets/branding/e-reader-logo.png

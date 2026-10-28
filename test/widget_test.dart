@@ -14,23 +14,19 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(home: ReaderPage(store: DeviceReadingStore())),
+      MaterialApp(
+        home: ReaderPage(settingsOnly: true, store: DeviceReadingStore()),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Literata'));
-    await tester.pump();
-    final paragraph = find.text('Bir sayfanın sessizliği');
-    expect(
-      DefaultTextStyle.of(tester.element(paragraph)).style.fontFamily,
-      'Literata',
-    );
+    await tester.pumpAndSettle();
+    expect((await DeviceReadingStore().settings()).font, 'Literata');
     await tester.ensureVisible(find.text('Gece'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Gece'));
     await tester.pump();
-    expect(
-      DefaultTextStyle.of(tester.element(paragraph)).style.color,
-      PaperTheme.night.ink,
-    );
+    expect((await DeviceReadingStore().settings()).paper, 'night');
     expect(tester.takeException(), isNull);
   });
 

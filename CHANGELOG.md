@@ -1,5 +1,26 @@
 ﻿# Yeni özellikler
 
 - Kitaplarda kaldığın yerden okumaya devam et.
+- EPUB, DOCX ve PDF kitaplarda ayraç ekle, kaldır ve listeden sayfaya dön.
+- Ayraçları tek dokunuşla kitap adı ve sayfa numarasıyla otomatik kaydet; eklenme tarihi ve saatini göster. Eski ayraç konumlarını koru.
+- İki parmakla yazı boyutunu ayarla; metin sayfa içine yeniden yerleşir.
+- Uzun basarak seçtiğin metnin altını çiz, not ekle ve çevrimdışı sözlüğe bak.
+- Sıkı listede kitap bilgilerini ilk, kitabı ikinci dokunuşla aç.
 - Yazı tipi, boyut ve sayfa teması seçimlerini hatırla.
-- Kitaplığında kitap adına göre ara.
+- Kitap içi aramaya üst çubuktan ulaş; okuma ayarlarını kitaplıktan aç.
+- Sadece simgelerle 1/2/3/4 sayfa seçimi; dar ekranlarda uyumlu sayfa sayısı.
+- Akıcı dikey kaydırma, yukarı/aşağı oklarla kaydırma ve sağ/sol oklarla sayfa çevirme.
+- Çift tık/dokunuş ve F11 ile tam ekran, Esc ile çıkış; görünüm tercihlerinin saklanması.
+- Kitabın tamamını bekletmek yerine önce mevcut konumu göster; sayfa numaralarını arka planda hesapla ve son üç düzeni önbellekle.
+- Ekran genişliğini dolduran sayfalar, dar kenar boşlukları ve ince araç çubuklarıyla okuma alanını artır.
+- Uzun kitaplarda pencereyi kilitleyen eşzamanlı sayfalamayı kaldır; ölçümleri azalt, işlemi küçük parçalara böl ve hazırlık ilerlemesini göster. Boyut değişince eski hesabı iptal et; yinelenen kitap açma isteklerini önle.
+- Masaüstünde geniş tek sayfa düğmesi ve hızlı yazı büyütme/küçültme; tek sayfa modunda daha geniş metin alanı ve en az 24 punto başlangıç boyutu.
+- Okuma ayarlarını yan panele taşı; sayfaya dokunarak okuma araçlarını gizle/göster.
+- Geniş ekranda çift sayfa, satır aralığı ayarı, klavye/fare/trackpad ile gezinme ve daha hafif sayfa geçişleri.
+- Yanlış yazılan kitap adları için öneriler; bilinen klasiklerin Türkçe, Rusça, Arapça ve özgün/İngilizce adlarıyla arama.
+- Arapça arama alanı ve başlıklarda sağdan sola gösterim, çok dilli harf/işaret normalleştirme ve internet sonuçlarında Türkçe önceliği.
+- EPUB/DOCX sayfalarını bellekte tutarak sayfa geçişlerinde tekrarlanan metin ölçümünü kaldır.
+- EPUB/DOCX kitap içinde ara, sonuçtan ilgili sayfaya git ve eşleşmeleri gör.
+- EPUB, DOCX ve PDF okuyucularında sayfa numarasıyla gezin.
+- Sonuç bulunamadığında ücretsiz EPUB kitaplarını internette ara ve kitaplığa indir; popüler indirmeler önce gösterilir.
+- Kitaplığı Türkçe kitap adına veya dosya türüne göre sırala; dosya türüne göre filtrele ve sonuç sayısını gör.

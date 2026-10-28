@@ -1,27 +1,84 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+
+import 'app_language.dart';
 
 import 'books.dart';
 import 'library.dart';
 import 'paged_book.dart';
 import 'reading_store.dart';
+import 'page_layout_icon.dart';
+import 'reader_fullscreen.dart';
+import 'app_navigation.dart';
+import 'app_chrome.dart';
+import 'book_opening_splash.dart';
+import 'exit_confirmation.dart';
 
-void main() => runApp(const EReaderApp());
+import 'package:flutter/services.dart';
 
-class EReaderApp extends StatelessWidget {
+void main() {
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks([
+      'FreeDict + WikDict dictionary data',
+    ], await rootBundle.loadString('assets/dictionaries/LICENSE.txt'));
+  });
+  runApp(const EReaderApp());
+}
+
+class EReaderApp extends StatefulWidget {
   const EReaderApp({super.key});
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'E-Reader',
-    debugShowCheckedModeBanner: false,
-    theme: ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF64745A)),
-      scaffoldBackgroundColor: const Color(0xFFF0EEE8),
-      useMaterial3: true,
+  State<EReaderApp> createState() => _EReaderAppState();
+}
+
+class _EReaderAppState extends State<EReaderApp> {
+  final language = LanguageController();
+  @override
+  void initState() {
+    super.initState();
+    language.restore().catchError((Object _) {});
+  }
+
+  @override
+  void dispose() {
+    language.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => LanguageScope(
+    controller: language,
+    child: ListenableBuilder(
+      listenable: language,
+      builder: (context, _) => MaterialApp(
+        navigatorKey: AppNavigation.instance.navigatorKey,
+        builder: (context, child) => BookOpeningSplash(
+          child: AppChrome(child: child ?? const SizedBox.shrink()),
+        ),
+        locale: Locale(language.code),
+        supportedLocales: [for (final code in appLanguages.keys) Locale(code)],
+        localizationsDelegates: const [
+          AppTranslations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        title: 'E-Reader',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF64745A)),
+          scaffoldBackgroundColor: const Color(0xFFF0EEE8),
+          useMaterial3: true,
+        ),
+        home: const ExitConfirmation(
+          child: FirstLaunchLanguage(child: LibraryPage()),
+        ),
+      ),
     ),
-    home: const LibraryPage(),
   );
 }
 
@@ -39,7 +96,18 @@ enum PaperTheme {
 }
 
 class ReaderPage extends StatefulWidget {
-  const ReaderPage({super.key, this.book, this.bookId, this.store});
+  const ReaderPage({
+    super.key,
+    this.book,
+    this.bookId,
+    this.store,
+    this.settingsOnly = false,
+    this.initialOffset,
+    this.onPageCountChanged,
+  });
+  final bool settingsOnly;
+  final int? initialOffset;
+  final ValueChanged<int>? onPageCountChanged;
   final String? bookId;
   final ReadingStore? store;
   final BookContent? book;
@@ -51,6 +119,94 @@ class _ReaderPageState extends State<ReaderPage> {
   String font = 'Lora';
   double fontSize = 20;
   PaperTheme paper = PaperTheme.ivory;
+  String layout = 'auto';
+  double lineHeight = 1.15;
+  bool bookAnimations = true;
+  final readerKey = GlobalKey<PagedBookState>();
+  bool controlsVisible = true;
+  bool fullscreen = false;
+  bool fullscreenBusy = false;
+  late final VoidCallback stopFullscreenListener;
+
+  void applyFullscreen(bool value) {
+    if (!mounted || fullscreen == value) return;
+    AppNavigation.instance.fullscreen.value = value;
+    if (!value) hideSystemNavigation();
+    setState(() {
+      fullscreen = value;
+      controlsVisible = !value;
+    });
+  }
+
+  Future<void> toggleFullscreen() async {
+    if (fullscreenBusy) return;
+    fullscreenBusy = true;
+    try {
+      final value = !fullscreen;
+      await setReaderFullscreen(value);
+      applyFullscreen(value);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: AppText('Tam ekran açılamadı.')),
+        );
+      }
+    } finally {
+      fullscreenBusy = false;
+    }
+  }
+
+  Widget layoutButtons({bool automatic = false}) => Wrap(
+    spacing: 2,
+    children: [
+      if (automatic)
+        IconButton(
+          tooltip: tr(context, 'Otomatik sayfa düzeni'),
+          isSelected: layout == 'auto',
+          onPressed: () => selectLayout('auto'),
+          icon: const Icon(Icons.auto_awesome_mosaic_outlined),
+        ),
+      for (final entry in {
+        1: 'single',
+        2: 'double',
+        3: 'triple',
+        4: 'quadruple',
+      }.entries)
+        IconButton(
+          tooltip: tr(context, '${entry.key} sayfa'),
+          isSelected:
+              layout == entry.value ||
+              (!automatic &&
+                  layout == 'auto' &&
+                  entry.key ==
+                      (MediaQuery.sizeOf(context).width >= 1008 ? 2 : 1)),
+          visualDensity: VisualDensity.compact,
+          style: IconButton.styleFrom(
+            foregroundColor: automatic ? null : paper.ink,
+            backgroundColor: layout == entry.value
+                ? (automatic
+                      ? const Color(0xFFE1E7DC)
+                      : paper.ink.withValues(alpha: 0.1))
+                : null,
+          ),
+          onPressed: () => selectLayout(entry.value),
+          icon: PageLayoutIcon(count: entry.key),
+        ),
+    ],
+  );
+
+  void selectLayout(String value) {
+    setState(() {
+      layout = value;
+      if (value == 'single' && fontSize < 24) fontSize = 24;
+    });
+    saveSettings();
+  }
+
+  void resizeFont(double change) {
+    setState(() => fontSize = (fontSize + change).clamp(16, 32));
+    saveSettings();
+  }
 
   late final ReadingStore store = widget.store ?? ReadingStore.device;
   bool loading = true;
@@ -60,7 +216,22 @@ class _ReaderPageState extends State<ReaderPage> {
   @override
   void initState() {
     super.initState();
+    stopFullscreenListener = listenReaderFullscreen(applyFullscreen);
     restore();
+  }
+
+  @override
+  void dispose() {
+    stopFullscreenListener();
+    if (fullscreen) {
+      setReaderFullscreen(false)
+          .then((_) => hideSystemNavigation())
+          .catchError((Object _) {});
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => AppNavigation.instance.fullscreen.value = false,
+      );
+    }
+    super.dispose();
   }
 
   Future<void> restore() async {
@@ -75,8 +246,11 @@ class _ReaderPageState extends State<ReaderPage> {
       setState(() {
         font = saved.font;
         fontSize = saved.size;
+        layout = saved.layout;
+        lineHeight = saved.lineHeight;
+        bookAnimations = saved.bookAnimations;
         paper = PaperTheme.values.firstWhere((p) => p.name == saved.paper);
-        offset = position;
+        offset = widget.initialOffset ?? position;
       });
     } catch (_) {
       storageWarning();
@@ -96,7 +270,7 @@ class _ReaderPageState extends State<ReaderPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
+            content: AppText(
               'Okuma tercihleri kaydedilemiyor. Cihaz depolamasını kontrol edin.',
             ),
           ),
@@ -108,7 +282,14 @@ class _ReaderPageState extends State<ReaderPage> {
   Future<void> saveSettings() async {
     try {
       await store.saveSettings(
-        ReadingSettings(font: font, size: fontSize, paper: paper.name),
+        ReadingSettings(
+          font: font,
+          size: fontSize,
+          paper: paper.name,
+          layout: layout,
+          lineHeight: lineHeight,
+          bookAnimations: bookAnimations,
+        ),
       );
     } catch (_) {
       storageWarning();
@@ -130,7 +311,17 @@ class _ReaderPageState extends State<ReaderPage> {
   Widget settings() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      const Text(
+      const LanguagePicker(),
+      SwitchListTile.adaptive(
+        contentPadding: EdgeInsets.zero,
+        title: const AppText('Kitap açılış ve kapanış animasyonu'),
+        value: bookAnimations,
+        onChanged: (value) {
+          setState(() => bookAnimations = value);
+          saveSettings();
+        },
+      ),
+      const AppText(
         'OKUMA GÖRÜNÜMÜ',
         style: TextStyle(
           fontSize: 11,
@@ -139,7 +330,7 @@ class _ReaderPageState extends State<ReaderPage> {
         ),
       ),
       const SizedBox(height: 24),
-      const Text('Yazı tipi'),
+      const AppText('Yazı tipi'),
       const SizedBox(height: 8),
       Wrap(
         spacing: 8,
@@ -151,7 +342,7 @@ class _ReaderPageState extends State<ReaderPage> {
             'Sistem': 'Sade',
           }.entries)
             ChoiceChip(
-              label: Text(
+              label: AppText(
                 entry.value,
                 style: TextStyle(
                   fontFamily: entry.key == 'Sistem' ? null : entry.key,
@@ -166,7 +357,7 @@ class _ReaderPageState extends State<ReaderPage> {
         ],
       ),
       const SizedBox(height: 24),
-      Text('Yazı boyutu · ${fontSize.round()}'),
+      AppText('Yazı boyutu · ${fontSize.round()}'),
       Slider(
         value: fontSize,
         min: 16,
@@ -177,7 +368,23 @@ class _ReaderPageState extends State<ReaderPage> {
         onChangeEnd: (_) => saveSettings(),
       ),
       const SizedBox(height: 12),
-      const Text('Sayfa dokusu'),
+      const AppText('Sayfa düzeni'),
+      const SizedBox(height: 8),
+      layoutButtons(automatic: true),
+      const SizedBox(height: 8),
+      const SizedBox(height: 20),
+      const AppText('Satır aralığı'),
+      Slider(
+        value: lineHeight,
+        min: 1.0,
+        max: 2.1,
+        divisions: 22,
+        label: lineHeight.toStringAsFixed(2),
+        onChanged: (value) => setState(() => lineHeight = value),
+        onChangeEnd: (_) => saveSettings(),
+      ),
+      const SizedBox(height: 12),
+      const AppText('Sayfa dokusu'),
       const SizedBox(height: 12),
       Wrap(
         spacing: 10,
@@ -187,7 +394,7 @@ class _ReaderPageState extends State<ReaderPage> {
             Semantics(
               selected: paper == theme,
               child: Tooltip(
-                message: theme.label,
+                message: tr(context, theme.label),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(12),
                   onTap: () {
@@ -210,7 +417,7 @@ class _ReaderPageState extends State<ReaderPage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
+                        AppText(
                           'Aa',
                           style: TextStyle(
                             fontFamily: 'Lora',
@@ -218,7 +425,7 @@ class _ReaderPageState extends State<ReaderPage> {
                             color: theme.ink,
                           ),
                         ),
-                        Text(
+                        AppText(
                           theme.label,
                           style: TextStyle(fontSize: 11, color: theme.ink),
                         ),
@@ -231,22 +438,40 @@ class _ReaderPageState extends State<ReaderPage> {
         ],
       ),
       const SizedBox(height: 24),
-      const Text(
-        'Biraz yavaşla. Kendine bir sayfa ayır.',
-        style: TextStyle(color: Color(0xFF66705E), height: 1.6),
-      ),
     ],
   );
 
   Widget page() => widget.book != null
       ? PagedBook(
-          key: ValueKey('${widget.book!.title}-$font-$fontSize'),
+          key: readerKey,
           book: widget.book!,
+          bookId: widget.bookId,
+          store: store,
           initialOffset: offset,
           onPositionChanged: savePosition,
+          onPageCountChanged: widget.onPageCountChanged,
           paper: paper,
           font: font,
           fontSize: fontSize,
+          layout: layout,
+          lineHeight: lineHeight,
+          onPinch: (scale) {
+            final size = (fontSize * scale).clamp(16.0, 32.0);
+            if (size == fontSize) return;
+            setState(() => fontSize = size);
+            saveSettings();
+          },
+          controlsVisible: controlsVisible,
+          onToggleControls: () =>
+              setState(() => controlsVisible = !controlsVisible),
+          onToggleFullscreen: toggleFullscreen,
+          onEscape: () {
+            if (fullscreen) {
+              toggleFullscreen();
+            } else {
+              setState(() => controlsVisible = !controlsVisible);
+            }
+          },
         )
       : Container(
           constraints: const BoxConstraints(maxWidth: 760),
@@ -273,7 +498,7 @@ class _ReaderPageState extends State<ReaderPage> {
                 style: TextStyle(
                   fontFamily: font == 'Sistem' ? null : font,
                   fontSize: fontSize,
-                  height: 1.85,
+                  height: lineHeight,
                   color: paper.ink,
                 ),
                 child: Column(
@@ -325,61 +550,101 @@ class _ReaderPageState extends State<ReaderPage> {
         );
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      backgroundColor: const Color(0xFFF0EEE8),
-      title: const Row(
-        children: [
-          Icon(Icons.auto_stories_outlined, size: 22),
-          SizedBox(width: 12),
-          Text('E-Reader'),
-        ],
-      ),
-      actions: [
-        if (MediaQuery.sizeOf(context).width >= 480)
-          const Padding(
-            padding: EdgeInsets.only(right: 20),
-            child: Center(child: Text('Okuma odası')),
-          ),
-      ],
-    ),
-    body: loading
-        ? const Center(child: CircularProgressIndicator())
-        : LayoutBuilder(
-            builder: (context, constraints) {
-              final wide = constraints.maxWidth >= 1000;
-              return SingleChildScrollView(
-                padding: EdgeInsets.all(wide ? 36 : 16),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1180),
-                    child: wide
-                        ? Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(child: page()),
-                              const SizedBox(width: 36),
-                              SizedBox(width: 270, child: settings()),
-                            ],
-                          )
-                        : Column(
-                            children: [
-                              Card(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(20),
-                                  child: settings(),
-                                ),
-                              ),
-                              const SizedBox(height: 24),
-                              page(),
-                            ],
-                          ),
+  Widget build(BuildContext context) => widget.settingsOnly
+      ? Scaffold(
+          appBar: AppBar(title: const AppText('Okuma ayarları')),
+          body: loading
+              ? const Center(child: CircularProgressIndicator())
+              : SafeArea(
+                  child: ListView(
+                    padding: const EdgeInsets.all(24),
+                    children: [settings()],
                   ),
                 ),
-              );
+        )
+      : CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.f11): toggleFullscreen,
+            if (fullscreen)
+              const SingleActivator(LogicalKeyboardKey.escape):
+                  toggleFullscreen,
+          },
+          child: PopScope(
+            canPop: !fullscreen,
+            onPopInvokedWithResult: (didPop, result) {
+              if (!didPop && fullscreen) toggleFullscreen();
             },
+            child: Scaffold(
+              backgroundColor: paper.background,
+              appBar: fullscreen
+                  ? null
+                  : AppBar(
+                      toolbarHeight: controlsVisible
+                          ? (MediaQuery.sizeOf(context).width >= 650 ? 40 : 48)
+                          : 28,
+                      backgroundColor: paper.background,
+                      foregroundColor: paper.ink,
+                      automaticallyImplyLeading: controlsVisible,
+                      title: controlsVisible
+                          ? Text(
+                              widget.book?.title ?? tr(context, 'Okuma odası'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontFamily: 'Lora',
+                                fontSize: 16,
+                              ),
+                            )
+                          : null,
+                      actions: [
+                        if (controlsVisible && widget.book != null)
+                          IconButton(
+                            tooltip: tr(context, 'Kitap içinde ara'),
+                            onPressed: () =>
+                                readerKey.currentState?.searchBook(),
+                            icon: const Icon(Icons.search),
+                          ),
+                        if (controlsVisible &&
+                            widget.book != null &&
+                            MediaQuery.sizeOf(context).width >= 800) ...[
+                          layoutButtons(),
+                          IconButton(
+                            tooltip: tr(context, 'Yazıyı küçült'),
+                            onPressed: fontSize > 16
+                                ? () => resizeFont(-2)
+                                : null,
+                            icon: const Icon(Icons.text_decrease),
+                          ),
+                          IconButton(
+                            tooltip: tr(context, 'Yazıyı büyüt'),
+                            onPressed: fontSize < 32
+                                ? () => resizeFont(2)
+                                : null,
+                            icon: const Icon(Icons.text_increase),
+                          ),
+                        ],
+                      ],
+                    ),
+              body: loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : SafeArea(
+                      child: GestureDetector(
+                        onDoubleTap: widget.book == null
+                            ? toggleFullscreen
+                            : null,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: widget.book == null
+                              ? SingleChildScrollView(
+                                  child: Center(child: page()),
+                                )
+                              : page(),
+                        ),
+                      ),
+                    ),
+            ),
           ),
-  );
+        );
 }
 
 class PaperPainter extends CustomPainter {

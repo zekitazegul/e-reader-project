@@ -18,6 +18,16 @@ Uint8List zip(Map<String, String> entries) {
 }
 
 void main() {
+  test('Unknown author placeholders are removed without losing real names', () {
+    expect(
+      cleanBookAuthor('Bediuzzaman Said Nursi, Bilinmeyen'),
+      'Bediuzzaman Said Nursi',
+    );
+    expect(cleanBookAuthor('Unknown; Ömer Seyfettin'), 'Ömer Seyfettin');
+    expect(cleanBookAuthor('BİLİNMEYEN'), isNull);
+    expect(cleanBookAuthor('Unknown'), isNull);
+    expect(cleanBookAuthor(null), isNull);
+  });
   test('EPUB follows spine order and resolves relative chapter paths', () {
     final content = readBook(
       BookFile(
@@ -76,6 +86,7 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
     expect(find.textContaining('1 / '), findsOneWidget);
     await tester.tap(find.byTooltip('Sonraki sayfa'));
     await tester.pumpAndSettle();
